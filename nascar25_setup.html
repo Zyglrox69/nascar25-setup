@@ -6,16 +6,24 @@
 <title>NASCAR 25 Setup Generator</title>
 <style>
 body { font-family: Arial, sans-serif; padding: 20px; background:#f5f5f5; }
-h1 { text-align:center; }
+h1, h2 { text-align:center; }
 label { display:block; margin-top:10px; }
-select, input[type=range] { width: 100%; margin-top:5px; }
+select, input[type=range], input[type=number] { width: 100%; margin-top:5px; }
 button { margin-top: 20px; width:100%; padding:10px; background:#007bff; color:white; border:none; font-size:16px; border-radius:5px; }
 pre { background:#e0e0e0; padding:10px; border-radius:5px; overflow-x:auto; }
+table { width: 100%; border-collapse: collapse; margin-top:10px; }
+th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+th { background:#007bff; color:white; }
+.modified { background: #fff3cd; }
+.section { border:1px solid #ccc; padding:10px; margin-top:20px; border-radius:5px; background:white; }
 </style>
 </head>
 <body>
 
 <h1>NASCAR 25 Setup Generator</h1>
+
+<div class="section">
+<h2>Main Generator</h2>
 
 <label>Track:
 <select id="track">
@@ -68,145 +76,158 @@ pre { background:#e0e0e0; padding:10px; border-radius:5px; overflow-x:auto; }
 </label>
 
 <button onclick="generateSetup()">Generate Setup</button>
+</div>
 
+<div class="section">
+<h2>Quick Tune</h2>
+
+<p>Quickly adjust based on problem areas. Current setup auto-loaded from last generated setup.</p>
+
+<label>Track:
+<select id="qtTrack">
+<option value="Charlotte">Charlotte</option>
+<option value="Daytona">Daytona</option>
+<option value="Atlanta">Atlanta</option>
+</select>
+</label>
+
+<label>Current Wedge (%):
+<input type="number" id="qtWedge" value="50" step="0.1">
+</label>
+
+<label>Front Springs LF:
+<input type="number" id="qtFrontLF" value="3300">
+</label>
+
+<label>Front Springs RF:
+<input type="number" id="qtFrontRF" value="3300">
+</label>
+
+<label>Rear Springs LR:
+<input type="number" id="qtRearLR" value="2100">
+</label>
+
+<label>Rear Springs RR:
+<input type="number" id="qtRearRR" value="2775">
+</label>
+
+<label>Problem Areas:</label>
+<select id="qtEntry">
+<option value="Neutral">Neutral Entry</option>
+<option value="Tight">Tight Entry</option>
+<option value="Loose">Loose Entry</option>
+</select>
+
+<select id="qtMid">
+<option value="Neutral">Neutral Mid</option>
+<option value="Tight">Tight Mid</option>
+<option value="Loose">Loose Mid</option>
+</select>
+
+<select id="qtExit">
+<option value="Neutral">Neutral Exit</option>
+<option value="Tight">Tight Exit</option>
+<option value="Loose">Loose Exit</option>
+</select>
+
+<button onclick="quickTune()">Apply Quick Tune</button>
+</div>
+
+<div class="section">
+<h2>Output</h2>
 <pre id="output"></pre>
+<div id="outputTable"></div>
+</div>
 
 <script>
-// Master JSON data
+// Core data
 const data = {
   CupSeries: {
-    "Charlotte": {
-      wedge:50, frontSprings:{LF:3300, RF:3300}, rearSprings:{LR:2100, RR:2775},
-      tirePressure:{LF:22.5, RF:40, LR:22.5, RR:40}, swayBar:{Front:1.0, Rear:0.0},
-      rearGear:3.76, brakeBias:58, camber:{Front:{LF:5, RF:-6}, Rear:{LR:2, RR:-2}},
-      toe:{Front:0, Rear:0}, bump:{Front:{LF:3, RF:5}, Rear:{LR:7, RR:7}},
-      rebound:{Front:{LF:8, RF:6}, Rear:{LR:7, RR:7}}, wheelLock:7.5,
-      leftWeight:53, noseWeight:51, steeringOffset:0.01
-    },
-    "Daytona": {
-      wedge:50, frontSprings:{LF:3300, RF:3300}, rearSprings:{LR:2100, RR:2775},
-      tirePressure:{LF:22.5, RF:40, LR:22.5, RR:40}, swayBar:{Front:1.0, Rear:0.0},
-      rearGear:3.76, brakeBias:58, camber:{Front:{LF:5, RF:-6}, Rear:{LR:2, RR:-2}},
-      bump:{Front:{LF:3, RF:5}, Rear:{LR:7, RR:7}}, rebound:{Front:{LF:8, RF:6}, Rear:{LR:7, RR:7}},
-      wheelLock:3.75, leftWeight:53, noseWeight:51, steeringOffset:0.07
-    },
-    "Atlanta": {
-      wedge:50, frontSprings:{LF:0, RF:0}, rearSprings:{LR:0, RR:0},
-      tirePressure:{LF:0, RF:0, LR:0, RR:0}, swayBar:{Front:0, Rear:0}, rearGear:0, brakeBias:0,
-      camber:{Front:{LF:0, RF:0}, Rear:{LR:0, RR:0}}, bump:{Front:{LF:3, RF:5}, Rear:{LR:7, RR:7}},
-      rebound:{Front:{LF:8, RF:6}, Rear:{LR:7, RR:7}}, wheelLock:5, leftWeight:0, noseWeight:0, steeringOffset:0
-    }
-  },
-  drivingStyleModifiers:{
-    "Aggressive": {frontSprings:1.05, rearSprings:1.05, wedge:2, tirePressure:{LF:0.5, RF:0.5, LR:0.5, RR:0.5}},
-    "Balanced": {frontSprings:1.0, rearSprings:1.0, wedge:0, tirePressure:{LF:0, RF:0, LR:0, RR:0}},
-    "Smooth": {frontSprings:0.95, rearSprings:0.95, wedge:-2, tirePressure:{LF:-0.5, RF:-0.5, LR:-0.5, RR:-0.5}}
-  },
-  inputTypeModifiers:{
-    "Controller": {steeringOffset:0, wheelLock:0},
-    "Wheel": {steeringOffset:-0.02, wheelLock:2}
-  },
-  looseTightSlider:{
-    tight:{frontSprings:1.05, rearSprings:0.95, wedge:-1.5, rearRebound:1.05, leftWeight:0.5},
-    neutral:{frontSprings:1.0, rearSprings:1.0, wedge:0, rearRebound:1.0, leftWeight:0},
-    loose:{frontSprings:0.95, rearSprings:1.05, wedge:1.5, rearRebound:0.95, leftWeight:-0.5}
+    "Charlotte": {wedge:50, frontSprings:{LF:3300, RF:3300}, rearSprings:{LR:2100, RR:2775}, tirePressure:{LF:22.5, RF:40, LR:22.5, RR:40}, swayBar:{Front:1, Rear:0}, rearGear:3.76, brakeBias:58, camber:{Front:{LF:5, RF:-6}, Rear:{LR:2, RR:-2}}, toe:{Front:0, Rear:0}, bump:{Front:{LF:3, RF:5}, Rear:{LR:7, RR:7}}, rebound:{Front:{LF:8, RF:6}, Rear:{LR:7, RR:7}}, wheelLock:7.5, leftWeight:53, noseWeight:51, steeringOffset:0.01},
+    "Daytona": {wedge:50, frontSprings:{LF:3300, RF:3300}, rearSprings:{LR:2100, RR:2775}, tirePressure:{LF:22.5, RF:40, LR:22.5, RR:40}, swayBar:{Front:1, Rear:0}, rearGear:3.76, brakeBias:58, camber:{Front:{LF:5, RF:-6}, Rear:{LR:2, RR:-2}}, bump:{Front:{LF:3, RF:5}, Rear:{LR:7, RR:7}}, rebound:{Front:{LF:8, RF:6}, Rear:{LR:7, RR:7}}, wheelLock:3.75, leftWeight:53, noseWeight:51, steeringOffset:0.07},
+    "Atlanta": {wedge:50, frontSprings:{LF:0, RF:0}, rearSprings:{LR:0, RR:0}, tirePressure:{LF:0, RF:0, LR:0, RR:0}, swayBar:{Front:0, Rear:0}, rearGear:0, brakeBias:0, camber:{Front:{LF:0, RF:0}, Rear:{LR:0, RR:0}}, bump:{Front:{LF:3, RF:5}, Rear:{LR:7, RR:7}}, rebound:{Front:{LF:8, RF:6}, Rear:{LR:7, RR:7}}, wheelLock:5, leftWeight:0, noseWeight:0, steeringOffset:0}
   },
   cornerBalanceModifiers:{
-    Entry:{
-      Tight:{frontSprings:1.05,rearSprings:0.95,wedge:-1,rearRebound:1.05},
-      Neutral:{frontSprings:1,rearSprings:1,wedge:0,rearRebound:1},
-      Loose:{frontSprings:0.95,rearSprings:1.05,wedge:1,rearRebound:0.95}
-    },
-    Mid:{
-      Tight:{frontSprings:1.04,rearSprings:0.96,wedge:-0.5,rearRebound:1.03},
-      Neutral:{frontSprings:1,rearSprings:1,wedge:0,rearRebound:1},
-      Loose:{frontSprings:0.96,rearSprings:1.04,wedge:0.5,rearRebound:0.97}
-    },
-    Exit:{
-      Tight:{frontSprings:1.03,rearSprings:0.97,wedge:-0.5,rearRebound:1.02},
-      Neutral:{frontSprings:1,rearSprings:1,wedge:0,rearRebound:1},
-      Loose:{frontSprings:0.97,rearSprings:1.03,wedge:0.5,rearRebound:0.98}
-    }
+    Entry:{Tight:{frontSprings:1.05,rearSprings:0.95,wedge:-1,rearRebound:1.05}, Neutral:{frontSprings:1,rearSprings:1,wedge:0,rearRebound:1}, Loose:{frontSprings:0.95,rearSprings:1.05,wedge:1,rearRebound:0.95}},
+    Mid:{Tight:{frontSprings:1.04,rearSprings:0.96,wedge:-0.5,rearRebound:1.03}, Neutral:{frontSprings:1,rearSprings:1,wedge:0,rearRebound:1}, Loose:{frontSprings:0.96,rearSprings:1.04,wedge:0.5,rearRebound:0.97}},
+    Exit:{Tight:{frontSprings:1.03,rearSprings:0.97,wedge:-0.5,rearRebound:1.02}, Neutral:{frontSprings:1,rearSprings:1,wedge:0,rearRebound:1}, Loose:{frontSprings:0.97,rearSprings:1.03,wedge:0.5,rearRebound:0.98}}
   }
 };
 
-// Helper functions
-function applyModifier(value, mod, type='mult'){
-  if(typeof value==='object'){
-    const res={};
-    for(let k in value) res[k]=applyModifier(value[k], mod[k]!==undefined?mod[k]:1, type);
-    return res;
-  }
-  return type==='mult'?value*mod:value+mod;
+let lastSetup = null;
+
+function generateSetup(){
+  let track = document.getElementById('track').value;
+  let setup = JSON.parse(JSON.stringify(data.CupSeries[track]));
+  let cbEntry = data.cornerBalanceModifiers.Entry[document.getElementById('cornerEntry').value];
+  let cbMid = data.cornerBalanceModifiers.Mid[document.getElementById('cornerMid').value];
+  let cbExit = data.cornerBalanceModifiers.Exit[document.getElementById('cornerExit').value];
+  
+  // Apply corner modifiers
+  setup.frontSprings.LF *= cbEntry.frontSprings*cbMid.frontSprings*cbExit.frontSprings;
+  setup.frontSprings.RF *= cbEntry.frontSprings*cbMid.frontSprings*cbExit.frontSprings;
+  setup.rearSprings.LR *= cbEntry.rearSprings*cbMid.rearSprings*cbExit.rearSprings;
+  setup.rearSprings.RR *= cbEntry.rearSprings*cbMid.rearSprings*cbExit.rearSprings;
+  setup.wedge += cbEntry.wedge+cbMid.wedge+cbExit.wedge;
+  setup.rebound.Rear.LR *= cbEntry.rearRebound*cbMid.rearRebound*cbExit.rearRebound;
+  setup.rebound.Rear.RR *= cbEntry.rearRebound*cbMid.rearRebound*cbExit.rearRebound;
+
+  lastSetup = JSON.parse(JSON.stringify(setup));
+  populateQuickTune(lastSetup);
+  displaySetup(setup);
 }
 
-function interpolateLooseTight(value){
-  if(value>=0){ // Neutral → Loose
-    return {
-      frontSprings: data.looseTightSlider.neutral.frontSprings + value*(data.looseTightSlider.loose.frontSprings - data.looseTightSlider.neutral.frontSprings),
-      rearSprings: data.looseTightSlider.neutral.rearSprings + value*(data.looseTightSlider.loose.rearSprings - data.looseTightSlider.neutral.rearSprings),
-      wedge: data.looseTightSlider.neutral.wedge + value*(data.looseTightSlider.loose.wedge - data.looseTightSlider.neutral.wedge),
-      rearRebound: data.looseTightSlider.neutral.rearRebound + value*(data.looseTightSlider.loose.rearRebound - data.looseTightSlider.neutral.rearRebound),
-      leftWeight: data.looseTightSlider.neutral.leftWeight + value*(data.looseTightSlider.loose.leftWeight - data.looseTightSlider.neutral.leftWeight)
-    };
-  }else{ // Tight → Neutral
-    let v = -value;
-    return {
-      frontSprings: data.looseTightSlider.neutral.frontSprings + v*(data.looseTightSlider.tight.frontSprings - data.looseTightSlider.neutral.frontSprings),
-      rearSprings: data.looseTightSlider.neutral.rearSprings + v*(data.looseTightSlider.tight.rearSprings - data.looseTightSlider.neutral.rearSprings),
-      wedge: data.looseTightSlider.neutral.wedge + v*(data.looseTightSlider.tight.wedge - data.looseTightSlider.neutral.wedge),
-      rearRebound: data.looseTightSlider.neutral.rearRebound + v*(data.looseTightSlider.tight.rearRebound - data.looseTightSlider.neutral.rearRebound),
-      leftWeight: data.looseTightSlider.neutral.leftWeight + v*(data.looseTightSlider.tight.leftWeight - data.looseTightSlider.neutral.leftWeight)
-    };
+function populateQuickTune(setup){
+  document.getElementById('qtFrontLF').value = setup.frontSprings.LF.toFixed(0);
+  document.getElementById('qtFrontRF').value = setup.frontSprings.RF.toFixed(0);
+  document.getElementById('qtRearLR').value = setup.rearSprings.LR.toFixed(0);
+  document.getElementById('qtRearRR').value = setup.rearSprings.RR.toFixed(0);
+  document.getElementById('qtWedge').value = setup.wedge.toFixed(1);
+}
+
+function quickTune(){
+  if(!lastSetup){ alert("Generate a setup first."); return; }
+  let setup = JSON.parse(JSON.stringify(lastSetup));
+  // Apply corner adjustments
+  for(let phase of ['Entry','Mid','Exit']){
+    let val = document.getElementById('qt'+phase).value;
+    let mod = data.cornerBalanceModifiers[phase][val];
+    setup.frontSprings.LF *= mod.frontSprings;
+    setup.frontSprings.RF *= mod.frontSprings;
+    setup.rearSprings.LR *= mod.rearSprings;
+    setup.rearSprings.RR *= mod.rearSprings;
+    setup.wedge += mod.wedge;
+    setup.rebound.Rear.LR *= mod.rearRebound;
+    setup.rebound.Rear.RR *= mod.rearRebound;
   }
+  displaySetup(setup,true);
+}
+
+function displaySetup(setup,highlight=false){
+  document.getElementById('output').innerText = JSON.stringify(setup,null,2);
+  let html = '<table><tr><th>Parameter</th><th>Value</th></tr>';
+  for(let key in setup){
+    if(typeof setup[key]==='object'){
+      for(let sub in setup[key]){
+        if(typeof setup[key][sub]==='object'){
+          for(let sub2 in setup[key][sub]){
+            html += `<tr ${highlight?'class="modified"':''}><td>${key}.${sub}.${sub2}</td><td>${setup[key][sub][sub2]}</td></tr>`;
+          }
+        } else {
+          html += `<tr ${highlight?'class="modified"':''}><td>${key}.${sub}</td><td>${setup[key][sub]}</td></tr>`;
+        }
+      }
+    } else {
+      html += `<tr ${highlight?'class="modified"':''}><td>${key}</td><td>${setup[key]}</td></tr>`;
+    }
+  }
+  html += '</table>';
+  document.getElementById('outputTable').innerHTML = html;
 }
 
 document.getElementById('looseTight').addEventListener('input', e=>{
   document.getElementById('looseTightValue').innerText = e.target.value;
 });
-
-function generateSetup(){
-  let track=document.getElementById('track').value;
-  let style=document.getElementById('style').value;
-  let inputType=document.getElementById('inputType').value;
-  let looseTight=parseFloat(document.getElementById('looseTight').value);
-  let cornerBalance={
-    Entry: document.getElementById('cornerEntry').value,
-    Mid: document.getElementById('cornerMid').value,
-    Exit: document.getElementById('cornerExit').value
-  };
-  
-  let setup=JSON.parse(JSON.stringify(data.CupSeries[track])); // deep copy
-  
-  // Driving style
-  setup.frontSprings=applyModifier(setup.frontSprings, data.drivingStyleModifiers[style].frontSprings);
-  setup.rearSprings=applyModifier(setup.rearSprings, data.drivingStyleModifiers[style].rearSprings);
-  setup.wedge+=data.drivingStyleModifiers[style].wedge;
-  setup.tirePressure=applyModifier(setup.tirePressure, data.drivingStyleModifiers[style].tirePressure, 'add');
-  
-  // Input type
-  setup.steeringOffset+=data.inputTypeModifiers[inputType].steeringOffset;
-  setup.wheelLock+=data.inputTypeModifiers[inputType].wheelLock;
-  
-  // Loose/Tight slider
-  let looseMods=interpolateLooseTight(looseTight);
-  setup.frontSprings=applyModifier(setup.frontSprings, looseMods.frontSprings);
-  setup.rearSprings=applyModifier(setup.rearSprings, looseMods.rearSprings);
-  setup.wedge+=looseMods.wedge;
-  setup.rebound.Rear=applyModifier(setup.rebound.Rear, looseMods.rearRebound);
-  setup.leftWeight+=looseMods.leftWeight;
-  
-  // Corner balance
-  for(let phase in cornerBalance){
-    let cb=data.cornerBalanceModifiers[phase][cornerBalance[phase]];
-    setup.frontSprings=applyModifier(setup.frontSprings, cb.frontSprings);
-    setup.rearSprings=applyModifier(setup.rearSprings, cb.rearSprings);
-    setup.wedge+=cb.wedge;
-    setup.rebound.Rear=applyModifier(setup.rebound.Rear, cb.rearRebound);
-  }
-  
-  document.getElementById('output').innerText=JSON.stringify(setup,null,2);
-}
 </script>
 
 </body>
